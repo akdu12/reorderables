@@ -35,6 +35,10 @@ import './typedefs.dart';
 ///
 ///  * [ReorderableRow], for a version of this widget that is always horizontal.
 ///  * [ReorderableColumn], for a version of this widget that is always vertical.
+///
+///
+typedef OnMoveToExternalTarget = void Function(Key externalTarget, Key nodeKey);
+
 class ReorderableFlex extends StatefulWidget {
   /// Creates a reorderable list.
   ReorderableFlex({
@@ -50,6 +54,7 @@ class ReorderableFlex extends StatefulWidget {
     this.buildDraggableFeedback,
     this.mainAxisAlignment = MainAxisAlignment.start,
     this.onNoReorder,
+    this.onMoveToExternalTarget,
     this.scrollController,
     this.needsLongPressDraggable = true,
     this.draggingWidgetOpacity = 0.2,
@@ -89,6 +94,7 @@ class ReorderableFlex extends StatefulWidget {
   /// children.
   final ReorderCallback onReorder;
   final NoReorderCallback? onNoReorder;
+  final OnMoveToExternalTarget? onMoveToExternalTarget;
 
   final BuildItemsContainer? buildItemsContainer;
   final BuildDraggableFeedback? buildDraggableFeedback;
@@ -137,6 +143,7 @@ class _ReorderableFlexState extends State<ReorderableFlex> {
           scrollDirection: widget.scrollDirection,
           onReorder: widget.onReorder,
           onNoReorder: widget.onNoReorder,
+          onMoveToExternalTarget: widget.onMoveToExternalTarget,
           padding: widget.padding,
           buildItemsContainer: widget.buildItemsContainer,
           buildDraggableFeedback: widget.buildDraggableFeedback,
@@ -176,6 +183,7 @@ class _ReorderableFlexContent extends StatefulWidget {
     required this.direction,
     required this.scrollDirection,
     required this.onReorder,
+    required this.onMoveToExternalTarget,
     required this.mainAxisAlignment,
     required this.scrollController,
     required this.needsLongPressDraggable,
@@ -195,6 +203,7 @@ class _ReorderableFlexContent extends StatefulWidget {
   final Axis scrollDirection;
   final ReorderCallback onReorder;
   final NoReorderCallback? onNoReorder;
+  final OnMoveToExternalTarget? onMoveToExternalTarget;
   final BuildItemsContainer? buildItemsContainer;
   final BuildDraggableFeedback? buildDraggableFeedback;
   final ScrollController? scrollController;
@@ -264,6 +273,8 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
 
   // Whether or not we are currently scrolling this view to show a widget.
   bool _scrolling = false;
+
+  Key? toAccept;
 
 //  final GlobalKey _contentKey = GlobalKey(debugLabel: '$ReorderableFlex content key');
 
@@ -425,7 +436,8 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
   Widget _wrap(Widget toWrap, int index) {
     assert(toWrap.key != null);
     final GlobalObjectKey keyIndexGlobalKey = GlobalObjectKey(toWrap.key!);
-    // We pass the toWrapWithGlobalKey into the Draggable so that when a list
+
+    // We pass the toWrapWithGlobalKey into th=e Draggable so that when a list
     // item gets dragged, the accessibility framework can preserve the selected
     // state of the dragging item.
 
@@ -467,8 +479,11 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
     // Drops toWrap into the last position it was hovering over.
     void onDragEnded() {
 //      reorder(_dragStartIndex, _currentIndex);
+      /// dropped the item on an external list
       setState(() {
-        _reorder(_dragStartIndex, _currentIndex);
+        if (toAccept != null) {
+          _reorder(_dragStartIndex, _currentIndex);
+        }
         _dragStartIndex = -1;
         _ghostIndex = -1;
         _currentIndex = -1;
@@ -515,8 +530,9 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
         }
         semanticsActions[CustomSemanticsAction(label: reorderItemAfter)] =
             moveAfter;
-        semanticsActions[CustomSemanticsAction(
-            label: localizations.reorderItemToEnd)] = moveToEnd;
+        semanticsActions[
+                CustomSemanticsAction(label: localizations.reorderItemToEnd)] =
+            moveToEnd;
       }
 
       // We pass toWrap with a GlobalKey into the Draggable so that when a list
@@ -632,8 +648,11 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 // When the drag does not end inside a DragTarget widget, the
                 // drag fails, but we still reorder the widget to the last position it
                 // had been dragged to.
-                onDraggableCanceled: (Velocity velocity, Offset offset) =>
-                    onDragEnded(),
+                onDraggableCanceled: (Velocity velocity, Offset offset) {
+                  if (toAccept != null && _dragging == toWrap.key) {
+                    onDragEnded();
+                  }
+                },
               )
             : Draggable<Key>(
                 maxSimultaneousDrags: 1,
@@ -659,8 +678,11 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 // When the drag does not end inside a DragTarget widget, the
                 // drag fails, but we still reorder the widget to the last position it
                 // had been dragged to.
-                onDraggableCanceled: (Velocity velocity, Offset offset) =>
-                    onDragEnded(),
+                onDraggableCanceled: (Velocity velocity, Offset offset) {
+                  if (toAccept != null && _dragging == toWrap.key) {
+                    onDragEnded();
+                  }
+                },
               );
       }
 
@@ -711,6 +733,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
       Widget dragTarget = DragTarget<Key>(
         builder: buildDragTarget,
         onWillAccept: (Key? toAccept) {
+          this.toAccept = toAccept;
           bool willAccept = _dragging == toAccept && toAccept != toWrap.key;
 
 //          debugPrint('${DateTime.now().toString().substring(5, 22)} reorderable_flex.dart(609) $this._wrap: '
@@ -735,10 +758,20 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
           });
           _scrollTo(context);
           // If the target is not the original starting point, then we will accept the drop.
-          return willAccept; //_dragging == toAccept && toAccept != toWrap.key;
+          return toAccept !=
+              toWrap.key; //_dragging == toAccept && toAccept != toWrap.key;
         },
-        onAccept: (Key accepted) {},
-        onLeave: (Object? leaving) {},
+        onAccept: (Key accepted) {
+          this.toAccept = null;
+          if (_dragging != accepted) {
+            if (widget.onMoveToExternalTarget != null) {
+              widget.onMoveToExternalTarget!(toWrap.key!,accepted);
+            }
+          }
+        },
+        onLeave: (Object? leaving) {
+          this.toAccept = null;
+        },
       );
 
       dragTarget = KeyedSubtree(key: keyIndexGlobalKey, child: dragTarget);
@@ -1047,6 +1080,7 @@ class ReorderableColumn extends ReorderableFlex {
     List<Widget> children = const <Widget>[],
     BuildDraggableFeedback? buildDraggableFeedback,
     NoReorderCallback? onNoReorder,
+    OnMoveToExternalTarget? onMoveToExternalTarget,
     ScrollController? scrollController,
     bool needsLongPressDraggable = true,
     double draggingWidgetOpacity = 0.2,
@@ -1056,6 +1090,7 @@ class ReorderableColumn extends ReorderableFlex {
   }) : super(
             key: key,
             header: header,
+            onMoveToExternalTarget: onMoveToExternalTarget,
             footer: footer,
             children: children,
             onReorder: onReorder,
