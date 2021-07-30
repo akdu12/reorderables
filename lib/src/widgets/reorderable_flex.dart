@@ -477,11 +477,11 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
     }
 
     // Drops toWrap into the last position it was hovering over.
-    void onDragEnded() {
+    void onDragEnded({bool reorder = true}) {
 //      reorder(_dragStartIndex, _currentIndex);
       /// dropped the item on an external list
       setState(() {
-        if (toAccept != null) {
+        if (reorder) {
           _reorder(_dragStartIndex, _currentIndex);
         }
         _dragStartIndex = -1;
@@ -644,12 +644,14 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 onDragStarted: onDragStarted,
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
-                onDragCompleted: onDragEnded,
+                onDragCompleted: () {
+                  onDragEnded(reorder: toAccept == toWrap.key);
+                },
                 // When the drag does not end inside a DragTarget widget, the
                 // drag fails, but we still reorder the widget to the last position it
                 // had been dragged to.
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
-                  if (toAccept != null && _dragging == toWrap.key) {
+                  if (toAccept == toWrap.key && _dragging == toWrap.key) {
                     onDragEnded();
                   }
                 },
@@ -674,12 +676,14 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 onDragStarted: onDragStarted,
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
-                onDragCompleted: onDragEnded,
+                onDragCompleted: () {
+                  onDragEnded(reorder: toAccept == toWrap.key);
+                },
                 // When the drag does not end inside a DragTarget widget, the
                 // drag fails, but we still reorder the widget to the last position it
                 // had been dragged to.
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
-                  if (toAccept != null && _dragging == toWrap.key) {
+                  if (toAccept == toWrap.key && _dragging == toWrap.key) {
                     onDragEnded();
                   }
                 },
@@ -733,7 +737,6 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
       Widget dragTarget = DragTarget<Key>(
         builder: buildDragTarget,
         onWillAccept: (Key? toAccept) {
-          this.toAccept = toAccept;
           bool willAccept = _dragging == toAccept && toAccept != toWrap.key;
 
 //          debugPrint('${DateTime.now().toString().substring(5, 22)} reorderable_flex.dart(609) $this._wrap: '
@@ -741,6 +744,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
 
           setState(() {
             if (willAccept) {
+              this.toAccept = toAccept;
               int shiftedIndex = index;
               if (index == _dragStartIndex) {
                 shiftedIndex = _ghostIndex;
@@ -762,16 +766,13 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
               toWrap.key; //_dragging == toAccept && toAccept != toWrap.key;
         },
         onAccept: (Key accepted) {
-          this.toAccept = null;
           if (_dragging != accepted) {
             if (widget.onMoveToExternalTarget != null) {
-              widget.onMoveToExternalTarget!(toWrap.key!,accepted);
+              widget.onMoveToExternalTarget!(toWrap.key!, accepted);
             }
           }
         },
-        onLeave: (Object? leaving) {
-          this.toAccept = null;
-        },
+        onLeave: (Object? leaving) {},
       );
 
       dragTarget = KeyedSubtree(key: keyIndexGlobalKey, child: dragTarget);
