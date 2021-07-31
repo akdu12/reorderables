@@ -276,6 +276,9 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
 
   Key? toAccept;
 
+  Offset? _visitedTargetOffset;
+  Offset? _draggingOffset;
+
 //  final GlobalKey _contentKey = GlobalKey(debugLabel: '$ReorderableFlex content key');
 
   Size get _dropAreaSize {
@@ -412,6 +415,14 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
       }
     }
   }
+
+  bool get hasMovedToExternalTarget =>
+      (((_visitedTargetOffset!.dy - _draggingOffset!.dy).abs() >
+                  ((_draggingFeedbackSize?.height ?? 0) / 2)) &&
+              _currentIndex == widget.children.length - 1 ||
+          (_visitedTargetOffset!.dy - _draggingOffset!.dy).abs() >
+                  ((_draggingFeedbackSize?.height ?? 0) / 2) &&
+              _currentIndex == 0);
 
   // Wraps children in Row or Column, so that the children flow in
   // the widget's scrollDirection.
@@ -645,15 +656,11 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: () {
-                  onDragEnded(reorder: toAccept == toWrap.key);
+                  onDragEnded(reorder: !hasMovedToExternalTarget);
                 },
-                // When the drag does not end inside a DragTarget widget, the
-                // drag fails, but we still reorder the widget to the last position it
-                // had been dragged to.
+
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
-                  if (toAccept == toWrap.key && _dragging == toWrap.key) {
-                    onDragEnded();
-                  }
+                  onDragEnded();
                 },
               )
             : Draggable<Key>(
@@ -662,6 +669,9 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 data: toWrap.key,
                 ignoringFeedbackSemantics: false,
                 feedback: feedbackBuilder,
+                onDragEnd: (details) {
+                  _draggingOffset = details.offset;
+                },
                 // Wrap toWrapWithSemantics with a widget that supports HitTestBehavior
                 // to make sure the whole toWrapWithSemantics responds to pointer events, i.e. dragging
                 child: MetaData(
@@ -677,15 +687,11 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: () {
-                  onDragEnded(reorder: toAccept == toWrap.key);
+                  onDragEnded(reorder: !hasMovedToExternalTarget);
                 },
-                // When the drag does not end inside a DragTarget widget, the
-                // drag fails, but we still reorder the widget to the last position it
-                // had been dragged to.
+
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
-                  if (toAccept == toWrap.key && _dragging == toWrap.key) {
-                    onDragEnded();
-                  }
+                  onDragEnded();
                 },
               );
       }
@@ -736,6 +742,9 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
     return Builder(builder: (BuildContext context) {
       Widget dragTarget = DragTarget<Key>(
         builder: buildDragTarget,
+        onMove: (details) {
+          _visitedTargetOffset = details.offset;
+        },
         onWillAccept: (Key? toAccept) {
           bool willAccept = _dragging == toAccept && toAccept != toWrap.key;
 
@@ -755,6 +764,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
               }
               _nextIndex = shiftedIndex;
             } else {
+              this.toAccept = null;
               _nextIndex = index;
             }
 
