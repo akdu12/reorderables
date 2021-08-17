@@ -495,6 +495,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
         if (reorder) {
           _reorder(_dragStartIndex, _currentIndex);
         }
+        _dragging = null;
         _dragStartIndex = -1;
         _ghostIndex = -1;
         _currentIndex = -1;
@@ -780,6 +781,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
             if (widget.onMoveToExternalTarget != null) {
               widget.onMoveToExternalTarget!(toWrap.key!, accepted);
             }
+            _dragging = null;
           }
         },
         onLeave: (Object? leaving) {},
