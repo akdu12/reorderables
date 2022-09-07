@@ -41,6 +41,7 @@ class ReorderableWrap extends StatefulWidget {
     this.controller,
     this.direction = Axis.horizontal,
     this.scrollDirection = Axis.vertical,
+    this.scrollPhysics,
     this.padding,
     this.buildItemsContainer,
     this.buildDraggableFeedback,
@@ -59,6 +60,7 @@ class ReorderableWrap extends StatefulWidget {
     this.reorderAnimationDuration = const Duration(milliseconds: 200),
     this.scrollAnimationDuration = const Duration(milliseconds: 200),
     this.ignorePrimaryScrollController = false,
+    this.enableReorder = true,
     Key? key,
   }) :
 //        assert(
@@ -89,6 +91,14 @@ class ReorderableWrap extends StatefulWidget {
   /// children are placed in a new run vertically adjacent to the previous run.
   final Axis direction;
   final Axis scrollDirection;
+
+  /// How the scroll view should respond to user input.
+  ///
+  /// For example, determines how the scroll view continues to animate after the
+  /// user stops dragging the scroll view.
+  ///
+  /// Defaults to matching platform conventions.
+  final ScrollPhysics? scrollPhysics;
 
   /// The amount of space by which to inset the [children].
   final EdgeInsets? padding;
@@ -237,6 +247,7 @@ class ReorderableWrap extends StatefulWidget {
   final Duration reorderAnimationDuration;
   final Duration scrollAnimationDuration;
   final bool ignorePrimaryScrollController;
+  final bool enableReorder;
 
   @override
   _ReorderableWrapState createState() => _ReorderableWrapState();
@@ -271,6 +282,7 @@ class _ReorderableWrapState extends State<ReorderableWrap> {
           children: widget.children,
           direction: widget.direction,
           scrollDirection: widget.scrollDirection,
+          scrollPhysics: widget.scrollPhysics,
           onReorder: widget.onReorder,
           onNoReorder: widget.onNoReorder,
           onReorderStarted: widget.onReorderStarted,
@@ -290,6 +302,7 @@ class _ReorderableWrapState extends State<ReorderableWrap> {
           controller: widget.controller,
           reorderAnimationDuration: widget.reorderAnimationDuration,
           scrollAnimationDuration: widget.scrollAnimationDuration,
+          enableReorder: widget.enableReorder,
         );
       },
     );
@@ -315,6 +328,7 @@ class _ReorderableWrapContent extends StatefulWidget {
     required this.children,
     required this.direction,
     required this.scrollDirection,
+    required this.scrollPhysics,
     required this.padding,
     required this.onReorder,
     required this.onNoReorder,
@@ -336,6 +350,7 @@ class _ReorderableWrapContent extends StatefulWidget {
     this.controller,
     this.reorderAnimationDuration = const Duration(milliseconds: 200),
     this.scrollAnimationDuration = const Duration(milliseconds: 200),
+    required this.enableReorder
   });
 
   final List<Widget>? header;
@@ -344,6 +359,7 @@ class _ReorderableWrapContent extends StatefulWidget {
   final List<Widget> children;
   final Axis direction;
   final Axis scrollDirection;
+  final ScrollPhysics? scrollPhysics;
   final EdgeInsets? padding;
   final ReorderCallback onReorder;
   final NoReorderCallback? onNoReorder;
@@ -363,6 +379,7 @@ class _ReorderableWrapContent extends StatefulWidget {
   final int? maxMainAxisCount;
   final Duration reorderAnimationDuration;
   final Duration scrollAnimationDuration;
+  final bool enableReorder;
 
   @override
   _ReorderableWrapContentState createState() => _ReorderableWrapContentState();
@@ -433,6 +450,7 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
   late List<int> _childRunIndexes;
   late List<int> _nextChildRunIndexes;
   late List<Widget?> _wrapChildren;
+  late bool enableReorder;
 
   Size get _dropAreaSize {
     if (_draggingFeedbackSize == null) {
@@ -455,6 +473,7 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
   @override
   void initState() {
     super.initState();
+    enableReorder = widget.enableReorder;
     _reorderAnimationDuration = widget.reorderAnimationDuration;
     _scrollAnimationDuration = widget.scrollAnimationDuration;
     _entranceController = AnimationController(
@@ -517,7 +536,7 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
 
   // Scrolls to a target context if that context is not on the screen.
   void _scrollTo(BuildContext context) {
-    if (_scrolling) return;
+    if (_scrolling || !_scrollController.hasClients) return;
     final RenderObject contextObject = context.findRenderObject()!;
     final RenderAbstractViewport viewport =
         RenderAbstractViewport.of(contextObject)!;
@@ -796,7 +815,7 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
             context, contentSizeConstraints, toWrap);
       });
 
-      bool isReorderable = true;
+      bool isReorderable = widget.enableReorder;
       if (toWrap is ReorderableItem) {
         isReorderable = toWrap.reorderable;
       }
@@ -826,12 +845,11 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
                         opacity: 0.2,
                         //child: toWrap,//Container(width: 0, height: 0, child: toWrap)
                         child: _makeAppearingWidget(toWrap))),
-                //ConstrainedBox(constraints: contentConstraints),//SizedBox(),
-                dragAnchor: DragAnchor.child,
                 onDragStarted: onDragStarted,
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: onDragEnded,
+                dragAnchorStrategy: childDragAnchorStrategy,
                 // When the drag does not end inside a DragTarget widget, the
                 // drag fails, but we still reorder the widget to the last position it
                 // had been dragged to.
@@ -854,9 +872,9 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
                     child: _makeAppearingWidget(toWrap),
                   ),
                 ),
-                dragAnchor: DragAnchor.child,
                 onDragStarted: onDragStarted,
                 onDragCompleted: onDragEnded,
+                dragAnchorStrategy: childDragAnchorStrategy,
                 onDraggableCanceled: (Velocity velocity, Offset offset) =>
                     onDragEnded(),
               );
@@ -877,12 +895,14 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
 //      _childContexts[index] = context;
 //      var containedDraggable = draggable;
 //      draggable = KeyedSubtree(key: keyIndexGlobalKey, child: draggable);
-      var containedDraggable = Builder(builder: (BuildContext context) {
+      var containedDraggable =
+          ContainedDraggable(Builder(builder: (BuildContext context) {
         _childContexts[index] = context;
 //        return KeyedSubtree(key: keyIndexGlobalKey, child: draggable);
 //        return KeyedSubtree(key: ValueKey(index), child: draggable);
         return draggable;
-      });
+      }), draggable is LongPressDraggable || draggable is Draggable);
+
 //      debugPrint('index:$index displayIndex:$displayIndex _nextDisplayIndex:$_nextDisplayIndex _currentDisplayIndex:$_currentDisplayIndex _ghostDisplayIndex:$_ghostDisplayIndex _dragStartIndex:$_dragStartIndex');
 //      debugPrint(' _childRunIndexes:$_childRunIndexes _nextChildRunIndexes:$_nextChildRunIndexes _wrapChildRunIndexes:$_wrapChildRunIndexes');
 
@@ -930,7 +950,7 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
         //we still wrap dragTarget with a container so that widget's depths are the same and it prevents layout alignment issue
         return _buildContainerForMainAxis(
             children: _includeMovedAdjacentChildIfNeeded(
-                containedDraggable, displayIndex));
+                containedDraggable.builder, displayIndex));
       }
 
       bool _onWillAccept(int? toAccept, bool isPre) {
@@ -1012,27 +1032,29 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
 //        fit: StackFit.passthrough,
         clipBehavior: Clip.hardEdge,
         children: <Widget>[
-          containedDraggable,
-          Positioned(
-              left: 0,
-              top: 0,
-              width: widget.direction == Axis.horizontal
-                  ? _childSizes[index].width / 2
-                  : _childSizes[index].width,
-              height: widget.direction == Axis.vertical
-                  ? _childSizes[index].height / 2
-                  : _childSizes[index].height,
-              child: preDragTarget),
-          Positioned(
-              right: 0,
-              bottom: 0,
-              width: widget.direction == Axis.horizontal
-                  ? _childSizes[index].width / 2
-                  : _childSizes[index].width,
-              height: widget.direction == Axis.vertical
-                  ? _childSizes[index].height / 2
-                  : _childSizes[index].height,
-              child: nextDragTarget),
+          containedDraggable.builder,
+          if (containedDraggable.isReorderable)
+            Positioned(
+                left: 0,
+                top: 0,
+                width: widget.direction == Axis.horizontal
+                    ? _childSizes[index].width / 2
+                    : _childSizes[index].width,
+                height: widget.direction == Axis.vertical
+                    ? _childSizes[index].height / 2
+                    : _childSizes[index].height,
+                child: preDragTarget),
+          if (containedDraggable.isReorderable)
+            Positioned(
+                right: 0,
+                bottom: 0,
+                width: widget.direction == Axis.horizontal
+                    ? _childSizes[index].width / 2
+                    : _childSizes[index].width,
+                height: widget.direction == Axis.vertical
+                    ? _childSizes[index].height / 2
+                    : _childSizes[index].height,
+                child: nextDragTarget),
         ],
       );
 //      return dragTarget;
@@ -1213,6 +1235,7 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
       return SingleChildScrollView(
 //      key: _contentKey,
         scrollDirection: widget.scrollDirection,
+        physics: widget.scrollPhysics,
         child: (widget.buildItemsContainer ?? defaultBuildItemsContainer)(
             context, widget.direction, wrappedChildren),
         padding: widget.padding,
@@ -1254,4 +1277,11 @@ class _ReorderableWrapContentState extends State<_ReorderableWrapContent>
       ),
     );
   }
+}
+
+class ContainedDraggable {
+  Builder builder;
+  bool isReorderable;
+
+  ContainedDraggable(this.builder, this.isReorderable);
 }

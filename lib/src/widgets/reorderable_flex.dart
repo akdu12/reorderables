@@ -7,9 +7,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import './reorderable_widget.dart';
 import './passthrough_overlay.dart';
 import './reorderable_mixin.dart';
+import './reorderable_widget.dart';
 import './typedefs.dart';
 
 /// Reorderable (drag and drop) version of [Flex], a widget that displays its
@@ -37,7 +37,7 @@ import './typedefs.dart';
 ///  * [ReorderableColumn], for a version of this widget that is always vertical.
 ///
 ///
-typedef OnMoveToExternalTarget = void Function(Key externalTarget, Key nodeKey);
+typedef OnMoveToExternalTarget = void Function(Key externalTarget, int index);
 
 class ReorderableFlex extends StatefulWidget {
   /// Creates a reorderable list.
@@ -55,6 +55,7 @@ class ReorderableFlex extends StatefulWidget {
     this.mainAxisAlignment = MainAxisAlignment.start,
     this.onNoReorder,
     this.onMoveToExternalTarget,
+    this.onReorderStarted,
     this.scrollController,
     this.needsLongPressDraggable = true,
     this.draggingWidgetOpacity = 0.2,
@@ -95,6 +96,9 @@ class ReorderableFlex extends StatefulWidget {
   final ReorderCallback onReorder;
   final NoReorderCallback? onNoReorder;
   final OnMoveToExternalTarget? onMoveToExternalTarget;
+
+  /// Called when the draggable starts being dragged.
+  final ReorderStartedCallback? onReorderStarted;
 
   final BuildItemsContainer? buildItemsContainer;
   final BuildDraggableFeedback? buildDraggableFeedback;
@@ -143,6 +147,7 @@ class _ReorderableFlexState extends State<ReorderableFlex> {
           scrollDirection: widget.scrollDirection,
           onReorder: widget.onReorder,
           onNoReorder: widget.onNoReorder,
+          onReorderStarted: widget.onReorderStarted,
           onMoveToExternalTarget: widget.onMoveToExternalTarget,
           padding: widget.padding,
           buildItemsContainer: widget.buildItemsContainer,
@@ -183,12 +188,13 @@ class _ReorderableFlexContent extends StatefulWidget {
     required this.direction,
     required this.scrollDirection,
     required this.onReorder,
+    required this.onNoReorder,
+    required this.onReorderStarted,
     required this.onMoveToExternalTarget,
     required this.mainAxisAlignment,
     required this.scrollController,
     required this.needsLongPressDraggable,
     required this.draggingWidgetOpacity,
-    required this.onNoReorder,
     required this.buildItemsContainer,
     required this.buildDraggableFeedback,
     required this.padding,
@@ -204,6 +210,7 @@ class _ReorderableFlexContent extends StatefulWidget {
   final ReorderCallback onReorder;
   final NoReorderCallback? onNoReorder;
   final OnMoveToExternalTarget? onMoveToExternalTarget;
+  final ReorderStartedCallback? onReorderStarted;
   final BuildItemsContainer? buildItemsContainer;
   final BuildDraggableFeedback? buildDraggableFeedback;
   final ScrollController? scrollController;
@@ -252,7 +259,6 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
   // The member of widget.children currently being dragged.
   //
   // Null if no drag is underway.
-  Key? _dragging;
   Widget? _draggingWidget;
 
   // The last computed size of the feedback widget being dragged.
@@ -274,7 +280,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
   // Whether or not we are currently scrolling this view to show a widget.
   bool _scrolling = false;
 
-  Key? toAccept;
+  int? toAccept;
 
   Offset? _visitedTargetOffset;
   Offset? _draggingOffset;
@@ -456,13 +462,14 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
     void onDragStarted() {
       setState(() {
         _draggingWidget = toWrap;
-        _dragging = toWrap.key;
         _dragStartIndex = index;
         _ghostIndex = index;
         _currentIndex = index;
         _entranceController.value = 1.0;
         _draggingFeedbackSize = keyIndexGlobalKey.currentContext?.size;
       });
+
+      widget.onReorderStarted?.call(index);
     }
 
     // Places the value from startIndex one space before the element at endIndex.
@@ -476,8 +483,6 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
       // specifications.
       _ghostController.reverse(from: 0.1);
       _entranceController.reverse(from: 0);
-
-      _dragging = null;
     }
 
     void reorder(int startIndex, int endIndex) {
@@ -495,7 +500,6 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
         if (reorder) {
           _reorder(_dragStartIndex, _currentIndex);
         }
-        _dragging = null;
         _dragStartIndex = -1;
         _ghostIndex = -1;
         _currentIndex = -1;
@@ -588,7 +592,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
       );
     }
 
-    Widget buildDragTarget(BuildContext context, List<Key?> acceptedCandidates,
+    Widget buildDragTarget(BuildContext context, List<int?> acceptedCandidates,
         List<dynamic> rejectedCandidates) {
       final Widget toWrapWithSemantics = wrapWithSemantics();
 
@@ -615,10 +619,10 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
         child = toWrap;
       } else {
         child = widget.needsLongPressDraggable
-            ? LongPressDraggable<Key>(
+            ? LongPressDraggable<int>(
                 maxSimultaneousDrags: 1,
                 axis: widget.direction,
-                data: toWrap.key,
+                data: index,
                 ignoringFeedbackSemantics: false,
                 //        feedback: Container(
                 //          alignment: Alignment.topLeft,
@@ -651,9 +655,8 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                     child: Opacity(
                         opacity: 0,
                         child: Container(width: 0, height: 0, child: toWrap))),
-                //ConstrainedBox(constraints: contentConstraints),//SizedBox(),
-                dragAnchor: DragAnchor.child,
                 onDragStarted: onDragStarted,
+                dragAnchorStrategy: childDragAnchorStrategy,
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: () {
@@ -664,10 +667,10 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                   onDragEnded();
                 },
               )
-            : Draggable<Key>(
+            : Draggable<int>(
                 maxSimultaneousDrags: 1,
                 axis: widget.direction,
-                data: toWrap.key,
+                data: index,
                 ignoringFeedbackSemantics: false,
                 feedback: feedbackBuilder,
                 onDragEnd: (details) {
@@ -683,8 +686,8 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                     child: Opacity(
                         opacity: 0,
                         child: Container(width: 0, height: 0, child: toWrap))),
-                dragAnchor: DragAnchor.child,
                 onDragStarted: onDragStarted,
+                dragAnchorStrategy: childDragAnchorStrategy,
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: () {
@@ -741,13 +744,13 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
 
     // We wrap the drag target in a Builder so that we can scroll to its specific context.
     return Builder(builder: (BuildContext context) {
-      Widget dragTarget = DragTarget<Key>(
+      Widget dragTarget = DragTarget<int>(
         builder: buildDragTarget,
         onMove: (details) {
           _visitedTargetOffset = details.offset;
         },
-        onWillAccept: (Key? toAccept) {
-          bool willAccept = _dragging == toAccept && toAccept != toWrap.key;
+        onWillAccept: (int? toAccept) {
+          bool willAccept = _dragStartIndex == toAccept && toAccept != index;
 
 //          debugPrint('${DateTime.now().toString().substring(5, 22)} reorderable_flex.dart(609) $this._wrap: '
 //            'onWillAccept: toAccept:$toAccept return:$willAccept _nextIndex:$_nextIndex index:$index _currentIndex:$_currentIndex _dragStartIndex:$_dragStartIndex');
@@ -776,12 +779,11 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
           return toAccept !=
               toWrap.key; //_dragging == toAccept && toAccept != toWrap.key;
         },
-        onAccept: (Key accepted) {
-          if (_dragging != accepted) {
+        onAccept: (int accepted) {
+          if (_dragStartIndex != accepted) {
             if (widget.onMoveToExternalTarget != null) {
               widget.onMoveToExternalTarget!(toWrap.key!, accepted);
             }
-            _dragging = null;
           }
         },
         onLeave: (Object? leaving) {},
@@ -1014,6 +1016,7 @@ class ReorderableRow extends ReorderableFlex {
     List<Widget> children = const <Widget>[],
     BuildDraggableFeedback? buildDraggableFeedback,
     NoReorderCallback? onNoReorder,
+    ReorderStartedCallback? onReorderStarted,
     ScrollController? scrollController,
     bool needsLongPressDraggable = true,
     double draggingWidgetOpacity = 0.2,
@@ -1027,6 +1030,7 @@ class ReorderableRow extends ReorderableFlex {
             children: children,
             onReorder: onReorder,
             onNoReorder: onNoReorder,
+            onReorderStarted: onReorderStarted,
             direction: Axis.horizontal,
             scrollDirection: Axis.horizontal,
             padding: padding,
@@ -1093,6 +1097,7 @@ class ReorderableColumn extends ReorderableFlex {
     List<Widget> children = const <Widget>[],
     BuildDraggableFeedback? buildDraggableFeedback,
     NoReorderCallback? onNoReorder,
+    ReorderStartedCallback? onReorderStarted,
     OnMoveToExternalTarget? onMoveToExternalTarget,
     ScrollController? scrollController,
     bool needsLongPressDraggable = true,
@@ -1108,6 +1113,7 @@ class ReorderableColumn extends ReorderableFlex {
             children: children,
             onReorder: onReorder,
             onNoReorder: onNoReorder,
+            onReorderStarted: onReorderStarted,
             direction: Axis.vertical,
             padding: padding,
             buildItemsContainer:
