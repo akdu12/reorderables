@@ -37,7 +37,7 @@ import './typedefs.dart';
 ///  * [ReorderableColumn], for a version of this widget that is always vertical.
 ///
 ///
-typedef OnMoveToExternalTarget = void Function(Key externalTarget, int index);
+typedef OnMoveToExternalTarget = void Function(Key externalTarget, Key node);
 
 class ReorderableFlex extends StatefulWidget {
   /// Creates a reorderable list.
@@ -280,7 +280,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
   // Whether or not we are currently scrolling this view to show a widget.
   bool _scrolling = false;
 
-  int? toAccept;
+  Key? toAccept;
 
   Offset? _visitedTargetOffset;
   Offset? _draggingOffset;
@@ -592,7 +592,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
       );
     }
 
-    Widget buildDragTarget(BuildContext context, List<int?> acceptedCandidates,
+    Widget buildDragTarget(BuildContext context, List<Key?> acceptedCandidates,
         List<dynamic> rejectedCandidates) {
       final Widget toWrapWithSemantics = wrapWithSemantics();
 
@@ -619,10 +619,10 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
         child = toWrap;
       } else {
         child = widget.needsLongPressDraggable
-            ? LongPressDraggable<int>(
+            ? LongPressDraggable<Key>(
                 maxSimultaneousDrags: 1,
                 axis: widget.direction,
-                data: index,
+                data: toWrap.key,
                 ignoringFeedbackSemantics: false,
                 //        feedback: Container(
                 //          alignment: Alignment.topLeft,
@@ -667,10 +667,10 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                   onDragEnded();
                 },
               )
-            : Draggable<int>(
+            : Draggable<Key>(
                 maxSimultaneousDrags: 1,
                 axis: widget.direction,
-                data: index,
+                data: toWrap.key,
                 ignoringFeedbackSemantics: false,
                 feedback: feedbackBuilder,
                 onDragEnd: (details) {
@@ -744,12 +744,12 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
 
     // We wrap the drag target in a Builder so that we can scroll to its specific context.
     return Builder(builder: (BuildContext context) {
-      Widget dragTarget = DragTarget<int>(
+      Widget dragTarget = DragTarget<Key>(
         builder: buildDragTarget,
         onMove: (details) {
           _visitedTargetOffset = details.offset;
         },
-        onWillAccept: (int? toAccept) {
+        onWillAccept: (Key? toAccept) {
           bool willAccept = _dragStartIndex == toAccept && toAccept != index;
 
 //          debugPrint('${DateTime.now().toString().substring(5, 22)} reorderable_flex.dart(609) $this._wrap: '
@@ -779,7 +779,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
           return toAccept !=
               toWrap.key; //_dragging == toAccept && toAccept != toWrap.key;
         },
-        onAccept: (int accepted) {
+        onAccept: (Key accepted) {
           if (_dragStartIndex != accepted) {
             if (widget.onMoveToExternalTarget != null) {
               widget.onMoveToExternalTarget!(toWrap.key!, accepted);
