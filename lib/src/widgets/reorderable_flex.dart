@@ -496,6 +496,8 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
     void onDragEnded({bool reorder = true}) {
 //      reorder(_dragStartIndex, _currentIndex);
       /// dropped the item on an external list
+      print(_currentIndex);
+      print(_ghostIndex);
       setState(() {
         if (reorder) {
           _reorder(_dragStartIndex, _currentIndex);
@@ -691,7 +693,9 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: () {
-                  onDragEnded(reorder: !hasMovedToExternalTarget);
+                  onDragEnded(
+                      reorder: !hasMovedToExternalTarget &&
+                          _currentIndex == _ghostIndex && _ghostIndex != _dragStartIndex);
                 },
 
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
