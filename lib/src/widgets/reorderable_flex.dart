@@ -282,6 +282,8 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
 
   Key? toAccept;
 
+  Key? _draggingStartedKey;
+
   Offset? _visitedTargetOffset;
   Offset? _draggingOffset;
 
@@ -461,6 +463,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
     // Starts dragging toWrap.
     void onDragStarted() {
       setState(() {
+        _draggingStartedKey = toWrap.key;
         _draggingWidget = toWrap;
         _dragStartIndex = index;
         _ghostIndex = index;
@@ -496,8 +499,6 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
     void onDragEnded({bool reorder = true}) {
 //      reorder(_dragStartIndex, _currentIndex);
       /// dropped the item on an external list
-      print(_currentIndex);
-      print(_ghostIndex);
       setState(() {
         if (reorder) {
           _reorder(_dragStartIndex, _currentIndex);
@@ -506,6 +507,8 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
         _ghostIndex = -1;
         _currentIndex = -1;
         _draggingWidget = null;
+        _draggingStartedKey = null;
+        toAccept = null;
       });
     }
 
@@ -695,7 +698,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 onDragCompleted: () {
                   onDragEnded(
                       reorder: !hasMovedToExternalTarget &&
-                          _currentIndex == _ghostIndex && _ghostIndex != _dragStartIndex);
+                          _currentIndex == _ghostIndex && _ghostIndex != _dragStartIndex && toAccept != null);
                 },
 
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
@@ -754,7 +757,7 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
           _visitedTargetOffset = details.offset;
         },
         onWillAccept: (Key? toAccept) {
-          bool willAccept = _dragStartIndex == toAccept && toAccept != index;
+          bool willAccept = _draggingStartedKey == toAccept && toAccept != toWrap.key;
 
 //          debugPrint('${DateTime.now().toString().substring(5, 22)} reorderable_flex.dart(609) $this._wrap: '
 //            'onWillAccept: toAccept:$toAccept return:$willAccept _nextIndex:$_nextIndex index:$index _currentIndex:$_currentIndex _dragStartIndex:$_dragStartIndex');
