@@ -665,7 +665,9 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: () {
-                  onDragEnded(reorder: !hasMovedToExternalTarget);
+                  if(_visitedTargetOffset != null && _draggingOffset != null) {
+                    onDragEnded(reorder: !hasMovedToExternalTarget);
+                  }
                 },
 
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
@@ -696,9 +698,12 @@ class _ReorderableFlexContentState extends State<_ReorderableFlexContent>
                 // When the drag ends inside a DragTarget widget, the drag
                 // succeeds, and we reorder the widget into position appropriately.
                 onDragCompleted: () {
-                  onDragEnded(
-                      reorder: !hasMovedToExternalTarget &&
-                          _currentIndex == _ghostIndex && _ghostIndex != _dragStartIndex && toAccept != null);
+                  if(_visitedTargetOffset != null && _draggingOffset != null) {
+                    onDragEnded(
+                        reorder: !hasMovedToExternalTarget &&
+                            _currentIndex == _ghostIndex &&
+                            _ghostIndex != _dragStartIndex && toAccept != null);
+                  }
                 },
 
                 onDraggableCanceled: (Velocity velocity, Offset offset) {
